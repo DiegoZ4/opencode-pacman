@@ -39,7 +39,7 @@ Coordinates are cell `(x, y)`, origin top-left, `x ∈ [0,27]`, `y ∈ [0,30]`. 
 
 Key constants: `TUNNEL_ROW = 14` (open-ended wrap row), `PACMAN_START = {x:13, y:23}`, `GHOST_STARTS` inside the pen at row 14.
 
-## Game state machine
+## Game state machine!!
 
 States: `'start'` | `'playing'` | `'won'` | `'lost'`. Transitions are driven by `main.js`'s `loop()`; `game.js` only sets `won`/`lost`. Lives = 3, ghost collision resets positions (not the score/grid).
 
