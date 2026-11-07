@@ -39,15 +39,32 @@ function startGame() {
 
 if ( actionBtn ) actionBtn.addEventListener( 'click', startGame );
 
-function loop() {
-  frame++;
-  if ( game.state === 'playing' ) {
-    update( game );
-    if ( game.state === 'won' ) showOverlay( 'GANASTE', 'win', 'Reiniciar' );
-    else if ( game.state === 'lost' ) showOverlay( 'PERDISTE', 'lose', 'Reiniciar' );
+// Bucle con timestep fijo: la logica avanza a 60 ticks/s en cualquier monitor.
+// requestAnimationFrame dispara al refresco de pantalla, asi que sin acumulador
+// la velocidad del juego dependeria del monitor (a 120 Hz iria al doble).
+const TICK_MS = 1000 / 60;
+let lastTime = 0;
+let acc = 0;
+
+function loop( now ) {
+  if ( !lastTime ) lastTime = now;
+  // Cap del delta: al volver de una pestana en segundo plano, no intentar
+  // recuperar de golpe el tiempo perdido (la partida saltaria).
+  acc += Math.min( now - lastTime, 100 );
+  lastTime = now;
+
+  while ( acc >= TICK_MS ) {
+    acc -= TICK_MS;
+    frame++;
+    if ( game.state === 'playing' ) {
+      update( game );
+      if ( game.state === 'won' ) showOverlay( 'GANASTE', 'win', 'Reiniciar' );
+      else if ( game.state === 'lost' ) showOverlay( 'PERDISTE', 'lose', 'Reiniciar' );
+    }
   }
+
   draw( ctx, game, frame );
   requestAnimationFrame( loop );
 }
 
-loop();
+requestAnimationFrame( loop );
