@@ -21,6 +21,32 @@ const WARNING_TICKS = 120;    // ultimos 2 s: parpadeo blanco/azul en render.js
 const FRIGHTENED_SPEEDS = { blinky: 1 / 18, pinky: 1 / 20, inky: 1 / 22, clyde: 1 / 24 };
 const EYES_SPEED = 1 / 6;     // ojos comidos: mas rapidos que Pac-Man (1/8)
 const PELLET_POINTS = 50;
+const GHOST_EAT_POINTS = [ 200, 400, 800, 1600 ]; // cadena por modo (tope 1600)
+
+// SPEC 02: campo de distancias BFS hasta el centro del corral (13,14).
+// Los ojos lo descienden: BFS garantiza que toda celda tiene un vecino a
+// distancia menor, asi la llegada es monotona y sin bucles (el greedy
+// voraz podria orbitar — leccion de la trampa del corral de SPEC 01).
+function buildPenDist( grid ) {
+  const H = grid.length;
+  const W = grid[ 0 ].length;
+  const dist = Array.from( { length: H }, () => new Array( W ).fill( Infinity ) );
+  dist[ 14 ][ 13 ] = 0; // centro del corral
+  const queue = [ { x: 13, y: 14 } ];
+  while ( queue.length ) {
+    const c = queue.shift();
+    for ( const d of Object.values( DIRS ) ) {
+      const nx = c.x + d.x;
+      const ny = c.y + d.y;
+      if ( nx < 0 || nx >= W || ny < 0 || ny >= H ) continue;
+      if ( grid[ ny ][ nx ] === 1 ) continue; // pared bloquea; la puerta (3) no
+      if ( dist[ ny ][ nx ] !== Infinity ) continue;
+      dist[ ny ][ nx ] = dist[ c.y ][ c.x ] + 1;
+      queue.push( { x: nx, y: ny } );
+    }
+  }
+  return dist;
+}
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -38,6 +64,8 @@ function createGame() {
     lives: 3,
     dotsRemaining: dots,
     frightenedTicks: 0, // SPEC 02: ticks restantes del modo asustado
+    ghostEatChain: 0,   // SPEC 02: fantasmas comidos en el modo actual
+    penDist: buildPenDist( grid ), // SPEC 02: campo BFS al corral (ojos)
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -116,6 +144,7 @@ function movePacman( game ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += PELLET_POINTS;
       game.frightenedTicks = FRIGHTENED_TICKS;
+      game.ghostEatChain = 0; // la cadena de comer se reinicia por pellet
       for ( const g of game.ghosts ) {
         if ( g.state === 'eyes' ) continue;
         g.dir = OPPOSITE[ g.dir ];
@@ -139,6 +168,12 @@ const PEN_EXIT = { x: 13, y: 11 };
 // Esquina de retiro de clyde (inferior izquierda, transitable).
 const CLYDE_CORNER = { x: 1, y: 29 };
 
+// Dentro del corral (interior de la pen) o sobre su puerta.
+function enCorral( g ) {
+  return ( g.x >= 11 && g.x <= 16 && g.y >= 13 && g.y <= 15 ) ||
+    ( g.y === 12 && ( g.x === 13 || g.x === 14 ) );
+}
+
 // Celda objetivo de cada personalidad. Puede caer fuera del laberinto:
 // el selector voraz solo compara distancias Manhattan.
 function ghostTarget( game, g ) {
@@ -155,9 +190,7 @@ function ghostTarget( game, g ) {
   // Guarda de salida del corral: dentro (o sobre la puerta) el target es
   // fijo, porque con el target debajo del corral el selector voraz nunca
   // eligiria subir por la puerta (unica salida) y quedaria encerrado.
-  const enCorral = ( g.x >= 11 && g.x <= 16 && g.y >= 13 && g.y <= 15 ) ||
-    ( g.y === 12 && ( g.x === 13 || g.x === 14 ) );
-  if ( enCorral ) return PEN_EXIT;
+  if ( enCorral( g ) ) return PEN_EXIT;
 
   if ( g.kind === 'blinky' ) return pac;
   if ( g.kind === 'pinky' ) return { x: pac.x + 4 * d.x, y: pac.y + 4 * d.y };
@@ -176,8 +209,35 @@ function ghostTarget( game, g ) {
   return pac; // kind desconocido: perseguir como blinky
 }
 
+// SPEC 02: decision de los ojos — descender game.penDist hasta el corral.
+// Sin regla de no-reversa: BFS garantiza un vecino mas cercano al corral,
+// la distancia decrece estrictamente y no puede haber bucles ni oscilacion.
+function decideEyes( game, g ) {
+  const width = game.penDist[ 0 ].length;
+  let best = null;
+  let bestDist = Infinity;
+  for ( const dir of Object.keys( DIRS ) ) {
+    const d = DIRS[ dir ];
+    let nx = g.x + d.x;
+    const ny = g.y + d.y;
+    if ( nx < 0 ) nx = width - 1; // tunel
+    else if ( nx >= width ) nx = 0;
+    if ( ny < 0 || ny >= game.penDist.length ) continue;
+    const dist = game.penDist[ ny ][ nx ];
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  if ( best ) g.dir = best;
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
+  if ( g.state === 'eyes' ) {
+    decideEyes( game, g );
+    return;
+  }
   const target = ghostTarget( game, g );
 
   const options = Object.keys( DIRS ).filter(
@@ -219,6 +279,11 @@ function moveGhost( game, g ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
+    // SPEC 02: los ojos reviven al entrar al corral (deciden como vivos).
+    if ( g.state === 'eyes' && enCorral( g ) ) {
+      g.state = 'normal';
+      g.reversePending = false;
+    }
     // Giro 180 forzado (power pellet): decideGhost no lo pisa en esta celda.
     if ( g.reversePending ) g.reversePending = false;
     else decideGhost( game, g );
@@ -242,6 +307,7 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.state = 'normal';
     g.reversePending = false;
   } );
 }
@@ -255,19 +321,35 @@ function update( game ) {
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
   for ( const g of game.ghosts ) {
-    if ( collides( game.pacman, g ) ) {
-      game.lives--;
-      game.frightenedTicks = 0; // SPEC 02: perder una vida corta el modo
-      if ( game.lives <= 0 ) {
-        game.state = 'lost';
-        return;
-      }
-      resetPositions( game );
-      break;
+    if ( !collides( game.pacman, g ) ) continue;
+
+    // SPEC 02: los ojos se atraviesan sin efecto.
+    if ( g.state === 'eyes' ) continue;
+
+    // SPEC 02: comer fantasma asustado (cadena 200/400/800/1600, tope 1600).
+    if ( game.frightenedTicks > 0 ) {
+      game.score += GHOST_EAT_POINTS[ Math.min( game.ghostEatChain, GHOST_EAT_POINTS.length - 1 ) ];
+      game.ghostEatChain++;
+      g.state = 'eyes';
+      g.reversePending = false;
+      continue; // en el mismo tick pueden comerse mas
     }
+
+    game.lives--;
+    game.frightenedTicks = 0; // SPEC 02: perder una vida corta el modo
+    game.ghostEatChain = 0;
+    if ( game.lives <= 0 ) {
+      game.state = 'lost';
+      return;
+    }
+    resetPositions( game );
+    break;
   }
 
-  if ( game.frightenedTicks > 0 ) game.frightenedTicks--;
+  if ( game.frightenedTicks > 0 ) {
+    game.frightenedTicks--;
+    if ( game.frightenedTicks === 0 ) game.ghostEatChain = 0; // fin del modo
+  }
   if ( game.dotsRemaining <= 0 ) game.state = 'won';
 }
 

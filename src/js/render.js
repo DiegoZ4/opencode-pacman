@@ -111,6 +111,24 @@ function drawPacman( ctx, p, frame ) {
   ctx.fill();
 }
 
+// Ojos mirando segun direccion. Compartidos: fantasma normal y ojos (SPEC 02).
+function drawGhostEyes( ctx, g ) {
+  const { cx, cy } = cellCenter( g.x, g.y );
+  const dir = DIRS[ g.dir ] || { x: 0, y: 0 };
+  const ex = dir.x * 1.6;
+  const ey = dir.y * 1.6;
+  for ( const off of [ -3.5, 3.5 ] ) {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc( cx + off, cy - 1, 3, 0, Math.PI * 2 );
+    ctx.fill();
+    ctx.fillStyle = '#0000bb';
+    ctx.beginPath();
+    ctx.arc( cx + off + ex, cy - 1 + ey, 1.5, 0, Math.PI * 2 );
+    ctx.fill();
+  }
+}
+
 function drawGhost( ctx, g, color ) {
   const { cx, cy } = cellCenter( g.x, g.y );
   const r = TILE / 2 - 1;
@@ -131,20 +149,7 @@ function drawGhost( ctx, g, color ) {
   ctx.closePath();
   ctx.fill();
 
-  // ojos mirando segun direccion
-  const dir = DIRS[ g.dir ] || { x: 0, y: 0 };
-  const ex = dir.x * 1.6;
-  const ey = dir.y * 1.6;
-  for ( const off of [ -3.5, 3.5 ] ) {
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc( cx + off, cy - 1, 3, 0, Math.PI * 2 );
-    ctx.fill();
-    ctx.fillStyle = '#0000bb';
-    ctx.beginPath();
-    ctx.arc( cx + off + ex, cy - 1 + ey, 1.5, 0, Math.PI * 2 );
-    ctx.fill();
-  }
+  drawGhostEyes( ctx, g );
 }
 
 function drawHUD( ctx, game, W ) {
@@ -178,10 +183,15 @@ function draw( ctx, game, frame ) {
   drawDots( ctx, grid, frame );
   drawPacman( ctx, game.pacman, frame );
   game.ghosts.forEach( ( g ) => {
+    // SPEC 02: ojos comidos — solo los ojos, sin cuerpo.
+    if ( g.state === 'eyes' ) {
+      drawGhostEyes( ctx, g );
+      return;
+    }
     let color = GHOST_COLORS[ g.kind ] || '#ff0000';
     // SPEC 02: asustado azul; blanco/azul alternado en los ultimos 2 s
     // (WARNING_TICKS viene de game.js via window).
-    if ( game.frightenedTicks > 0 && g.state !== 'eyes' ) {
+    if ( game.frightenedTicks > 0 ) {
       color = FRIGHTENED_COLOR;
       if (
         game.frightenedTicks <= WARNING_TICKS &&
