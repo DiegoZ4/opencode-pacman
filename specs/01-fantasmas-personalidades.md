@@ -19,6 +19,7 @@ Hoy solo hay 2 fantasmas (`'hunter'` y `'random'` en `GHOST_STARTS`) con IA prim
   - `pinky` — emboscador: target = celda de Pac-Man + 4 celdas en su dirección actual (sin el overflow bug del arcade).
   - `inky` — flanqueador: target = blinky + 2 × ((pac + 2 delante) − blinky), usando la posición del fantasma `blinky`.
   - `clyde` — tímido: si distancia Manhattan a Pac-Man > 8 → target Pac-Man; si ≤ 8 → target su esquina.
+  - Guarda de salida del corral (enmienda al implementar): mientras un fantasma esté dentro del corral (x∈[11,16], y∈[13,15]) o sobre la puerta (13,12)/(14,12), su target es fijo: la celda sobre la puerta `PEN_EXIT = {x:13, y:11}`. Motivo: con el target debajo del corral el selector voraz nunca elige subir por la puerta (única salida) y los 4 quedaban encerrados en bucle al inicio. Fuera del corral aplica su personalidad normal.
 - Velocidad por personalidad en `src/js/game.js`: `GHOST_SPEEDS = { blinky: 1/9, pinky: 1/10, inky: 1/11, clyde: 1/12 }` (sustituye la constante `GHOST_SPEED`).
 - Colores ligados al kind en `src/js/render.js`: `GHOST_COLORS` pasa de array por índice a mapa kind→color.
 - Actualizar la sección "Ghost AI kinds" de `AGENTS.md` con los 4 kinds.
@@ -45,6 +46,9 @@ const GHOST_STARTS = [
 // src/js/game.js — velocidad por kind (sustituye a GHOST_SPEED)
 const GHOST_SPEEDS = { blinky: 1 / 9, pinky: 1 / 10, inky: 1 / 11, clyde: 1 / 12 };
 
+// src/js/game.js — celda sobre la puerta: salida fija del corral (enmienda)
+const PEN_EXIT = { x: 13, y: 11 };
+
 // src/js/game.js — esquina de retiro de clyde (inferior izquierda, transitable)
 const CLYDE_CORNER = { x: 1, y: 29 };
 
@@ -60,7 +64,7 @@ Convenciones: celdas `(x, y)` con origen arriba-izquierda; velocidades siempre d
 
 1. `maze.js`: reemplazar `GHOST_STARTS` por las 4 entradas. Verificación manual: abrir `src/index.html` y ver 4 fantasmas en el corral (aún con colores por índice y IA aleatoria, porque `'hunter'` ya no coincide).
 2. `game.js`: añadir `GHOST_SPEEDS` y que `createGame()` asigne `speed: GHOST_SPEEDS[g.kind]`; eliminar la constante `GHOST_SPEED`. Manual: blinky se nota más rápido, clyde más lento.
-3. `game.js`: reescribir `decideGhost()` — calcular el target según el kind (fórmulas del Scope) y reutilizar el selector voraz actual (no-reversa + 180° en callejón). Añadir `CLYDE_CORNER`. Fallback: si `inky` no encuentra al fantasma `blinky`, se comporta como `blinky`. Manual: blinky va directo a por Pac-Man; pinky corta el paso por delante; clyde da vueltas por la zona inferior izquierda.
+3. `game.js`: reescribir `decideGhost()` — calcular el target según el kind (fórmulas del Scope) y reutilizar el selector voraz actual (no-reversa + 180° en callejón). Añadir `CLYDE_CORNER` y `PEN_EXIT` (guarda de salida del corral). Fallback: si `inky` no encuentra al fantasma `blinky`, se comporta como `blinky`. Manual: los 4 salen del corral enseguida aunque Pac-Man esté abajo; blinky va directo a por Pac-Man; pinky corta el paso por delante; clyde da vueltas por la zona inferior izquierda.
 4. `render.js`: `GHOST_COLORS` como mapa kind→color y `drawGhost(ctx, g, GHOST_COLORS[g.kind] || '#ff0000')`. Manual: rojo, rosa, cian y naranja sin importar el orden de `GHOST_STARTS`.
 5. `AGENTS.md`: actualizar la línea "Ghost AI kinds" con los 4 kinds, personalidades y velocidades.
 
@@ -94,6 +98,7 @@ Cada paso deja el juego ejecutable y es committable por sí solo.
 - **Sí:** Pinky sin el overflow bug del arcade (arriba = 4 arriba + 4 izquierda). Más claro de depurar y verificar.
 - **Sí:** Clyde usa distancia Manhattan (≤ 8). Consistente con el resto del código (el hunter ya usaba Manhattan); el arcade usa euclídea, se descarta por simplicidad.
 - **Sí:** color ligado al kind en `render.js`. El color no depende del orden de `GHOST_STARTS`.
+- **Sí (enmienda acordada al implementar el paso 3):** dentro del corral (o sobre la puerta) el target es fijo `PEN_EXIT` (13,11). Con el target debajo del corral (Pac-Man nace en (13,23)) el selector voraz nunca elige subir por la puerta y los 4 quedaban encerrados en bucle al inicio. Se descartó la puerta unidireccional (opción 3): un fantasma perseguidor puede meterse puntualmente por la puerta y es expulsado de inmediato, sin bucle duro; no compensa tocar `canMove()`.
 
 ## Riesgos
 
@@ -101,7 +106,7 @@ Cada paso deja el juego ejecutable y es committable por sí solo.
 | --- | --- |
 | Dificultad salta de 2 a 4 fantasmas sin power pellets | Velocidades 1/9–1/12 mantienen a Pac-Man como el más rápido; vidas se quedan en 3. Ajuste fino en una spec futura si hace falta. |
 | `inky` depende de que exista un fantasma `blinky` | Fallback documentado: si no lo encuentra, se comporta como `blinky` (no crash). |
-| Fantasmas naciendo en columnas sin puerta (x=12, x=15) podrían tardar en salir | Los targets derivados de Pac-Man los guían hacia la puerta (cols 13-14); la regla del 180° en callejón evita quedarse clavados. |
+| Fantasmas naciendo en columnas sin puerta (x=12, x=15) podrían tardar en salir | La guarda de salida del corral fija el target en `PEN_EXIT` (13,11) mientras estén dentro o sobre la puerta: salen en 25-53 frames aunque Pac-Man esté debajo (verificado por simulación; sin la guarda, 0/4 salían en 3000 frames). |
 
 ## Qué **no** está en esta spec
 

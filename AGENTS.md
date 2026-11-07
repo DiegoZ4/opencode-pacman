@@ -43,7 +43,7 @@ Key constants: `TUNNEL_ROW = 14` (open-ended wrap row), `PACMAN_START = {x:13, y
 
 States: `'start'` | `'playing'` | `'won'` | `'lost'`. Transitions are driven by `main.js`'s `loop()`; `game.js` only sets `won`/`lost`. Lives = 3, ghost collision resets positions (not the score/grid).
 
-Ghost AI kinds (in `GHOST_STARTS`): `'hunter'` chases via Manhattan distance, `'random'` picks any non-reverse valid direction.
+Ghost AI kinds (in `GHOST_STARTS`): `'blinky'` aggressive — target = Pac-Man's cell; `'pinky'` ambusher — target = Pac-Man + 4 cells in his current direction; `'inky'` flanker — target = blinky + 2 × ((pac + 2 ahead) − blinky), falls back to blinky behavior if no blinky exists; `'clyde'` shy — target = Pac-Man beyond 8 Manhattan cells, else `CLYDE_CORNER` (1,29). All share the greedy selector in `decideGhost()`: valid non-reverse direction minimizing Manhattan distance to the target (180° only in dead ends). While inside the pen or on its door the target is fixed `PEN_EXIT` (13,11) so ghosts always leave. Speeds (`GHOST_SPEEDS`): blinky 1/9, pinky 1/10, inky 1/11, clyde 1/12 — all slower than Pac-Man (1/8). Colors are kind-bound in `GHOST_COLORS` (`render.js`), not index-based.
 
 ## Workflow
 

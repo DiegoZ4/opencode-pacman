@@ -112,9 +112,46 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+// Celda sobre la puerta: salida fija del corral.
+const PEN_EXIT = { x: 13, y: 11 };
+
+// Esquina de retiro de clyde (inferior izquierda, transitable).
+const CLYDE_CORNER = { x: 1, y: 29 };
+
+// Celda objetivo de cada personalidad. Puede caer fuera del laberinto:
+// el selector voraz solo compara distancias Manhattan.
+function ghostTarget( game, g ) {
+  const p = game.pacman;
+  const pac = { x: Math.round( p.x ), y: Math.round( p.y ) };
+  const d = DIRS[ p.dir ] || DIRS.left;
+
+  // Guarda de salida del corral: dentro (o sobre la puerta) el target es
+  // fijo, porque con el target debajo del corral el selector voraz nunca
+  // eligiria subir por la puerta (unica salida) y quedaria encerrado.
+  const enCorral = ( g.x >= 11 && g.x <= 16 && g.y >= 13 && g.y <= 15 ) ||
+    ( g.y === 12 && ( g.x === 13 || g.x === 14 ) );
+  if ( enCorral ) return PEN_EXIT;
+
+  if ( g.kind === 'blinky' ) return pac;
+  if ( g.kind === 'pinky' ) return { x: pac.x + 4 * d.x, y: pac.y + 4 * d.y };
+  if ( g.kind === 'inky' ) {
+    const blinky = game.ghosts.find( ( o ) => o.kind === 'blinky' );
+    if ( !blinky ) return pac; // fallback: sin blinky, actua como blinky
+    const b = { x: Math.round( blinky.x ), y: Math.round( blinky.y ) };
+    const ahead = { x: pac.x + 2 * d.x, y: pac.y + 2 * d.y };
+    // Flanqueo: target = blinky + 2 * (ahead - blinky).
+    return { x: b.x + 2 * ( ahead.x - b.x ), y: b.y + 2 * ( ahead.y - b.y ) };
+  }
+  if ( g.kind === 'clyde' ) {
+    const dist = Math.abs( g.x - pac.x ) + Math.abs( g.y - pac.y );
+    return dist > 8 ? pac : CLYDE_CORNER;
+  }
+  return pac; // kind desconocido: perseguir como blinky
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
-  const p = game.pacman;
+  const target = ghostTarget( game, g );
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
@@ -122,25 +159,21 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  // Selector voraz comun: direccion valida sin reversa que minimice la
+  // distancia Manhattan al target.
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = g.x + d.x;
+    const ny = g.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
     }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
   }
+  g.dir = best;
 }
 
 function moveGhost( game, g ) {
