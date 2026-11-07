@@ -15,6 +15,13 @@ const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 // aligned() con eps=1e-3 alinee exactamente. blinky el mas rapido, clyde el mas lento.
 const GHOST_SPEEDS = { blinky: 1 / 9, pinky: 1 / 10, inky: 1 / 11, clyde: 1 / 12 };
 
+// SPEC 02 — power pellets y modo frightened.
+const FRIGHTENED_TICKS = 360; // 6 s a 60 ticks/s (timestep fijo de main.js)
+const WARNING_TICKS = 120;    // ultimos 2 s: parpadeo blanco/azul en render.js
+const FRIGHTENED_SPEEDS = { blinky: 1 / 18, pinky: 1 / 20, inky: 1 / 22, clyde: 1 / 24 };
+const EYES_SPEED = 1 / 6;     // ojos comidos: mas rapidos que Pac-Man (1/8)
+const PELLET_POINTS = 50;
+
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
 function createGame() {
@@ -30,6 +37,7 @@ function createGame() {
     score: 0,
     lives: 3,
     dotsRemaining: dots,
+    frightenedTicks: 0, // SPEC 02: ticks restantes del modo asustado
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -42,8 +50,8 @@ function createGame() {
       x: g.x,
       y: g.y,
       dir: 'up',
-      speed: GHOST_SPEEDS[ g.kind ],
       kind: g.kind,
+      state: 'normal', // 'normal' | 'eyes' — la velocidad se deriva del modo
     } ) ),
   };
 }
@@ -102,6 +110,19 @@ function movePacman( game ) {
       game.score += 10;
       game.dotsRemaining--;
     }
+    // Comer power pellet (SPEC 02): asusta a los fantasmas.
+    // No resta dotsRemaining: los pellets no cuentan para ganar.
+    else if ( grid[ p.y ][ p.x ] === 4 ) {
+      grid[ p.y ][ p.x ] = 0;
+      game.score += PELLET_POINTS;
+      game.frightenedTicks = FRIGHTENED_TICKS;
+      for ( const g of game.ghosts ) {
+        if ( g.state === 'eyes' ) continue;
+        g.dir = OPPOSITE[ g.dir ];
+        // El giro no debe ser pisado por decideGhost en la proxima celda.
+        g.reversePending = true;
+      }
+    }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
   }
@@ -124,6 +145,12 @@ function ghostTarget( game, g ) {
   const p = game.pacman;
   const pac = { x: Math.round( p.x ), y: Math.round( p.y ) };
   const d = DIRS[ p.dir ] || DIRS.left;
+
+  // SPEC 02: frightened -> huir de Pac-Man (target espejo: 2*g - pac).
+  // Tambien dentro del corral (decision de la spec): la guarda no aplica.
+  if ( game.frightenedTicks > 0 && g.state !== 'eyes' ) {
+    return { x: 2 * g.x - pac.x, y: 2 * g.y - pac.y };
+  }
 
   // Guarda de salida del corral: dentro (o sobre la puerta) el target es
   // fijo, porque con el target debajo del corral el selector voraz nunca
@@ -176,6 +203,15 @@ function decideGhost( game, g ) {
   g.dir = best;
 }
 
+// Velocidad efectiva segun modo: ojos > frightened > normal.
+// Se calcula al vuelo para que expirar o cortar el modo no requiera
+// restaurar velocidades a mano (unica fuente de verdad: el estado).
+function ghostSpeed( game, g ) {
+  if ( g.state === 'eyes' ) return EYES_SPEED;
+  if ( game.frightenedTicks > 0 ) return FRIGHTENED_SPEEDS[ g.kind ] || GHOST_SPEEDS[ g.kind ];
+  return GHOST_SPEEDS[ g.kind ];
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
@@ -183,13 +219,16 @@ function moveGhost( game, g ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    decideGhost( game, g );
+    // Giro 180 forzado (power pellet): decideGhost no lo pisa en esta celda.
+    if ( g.reversePending ) g.reversePending = false;
+    else decideGhost( game, g );
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
   }
 
   const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
+  const speed = ghostSpeed( game, g );
+  g.x += d.x * speed;
+  g.y += d.y * speed;
   wrapTunnel( g, width );
 }
 
@@ -203,6 +242,7 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.reversePending = false;
   } );
 }
 
@@ -217,6 +257,7 @@ function update( game ) {
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
       game.lives--;
+      game.frightenedTicks = 0; // SPEC 02: perder una vida corta el modo
       if ( game.lives <= 0 ) {
         game.state = 'lost';
         return;
@@ -226,9 +267,11 @@ function update( game ) {
     }
   }
 
+  if ( game.frightenedTicks > 0 ) game.frightenedTicks--;
   if ( game.dotsRemaining <= 0 ) game.state = 'won';
 }
 
 window.createGame = createGame;
 window.update = update;
 window.DIRS = DIRS;
+window.WARNING_TICKS = WARNING_TICKS; // render.js lo usa para el parpadeo final

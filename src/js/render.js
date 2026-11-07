@@ -161,6 +161,9 @@ function drawHUD( ctx, game, W ) {
 const GHOST_COLORS = {
   blinky: '#ff0000', pinky: '#ffb8ff', inky: '#00ffff', clyde: '#ffb852',
 };
+// SPEC 02: frightened azul; flash blanco en los ultimos WARNING_TICKS.
+const FRIGHTENED_COLOR = '#2121ff';
+const FRIGHTENED_FLASH_COLOR = '#ffffff';
 
 function draw( ctx, game, frame ) {
   const grid = game.grid;
@@ -174,7 +177,21 @@ function draw( ctx, game, frame ) {
   drawDoor( ctx, grid );
   drawDots( ctx, grid, frame );
   drawPacman( ctx, game.pacman, frame );
-  game.ghosts.forEach( ( g ) => drawGhost( ctx, g, GHOST_COLORS[ g.kind ] || '#ff0000' ) );
+  game.ghosts.forEach( ( g ) => {
+    let color = GHOST_COLORS[ g.kind ] || '#ff0000';
+    // SPEC 02: asustado azul; blanco/azul alternado en los ultimos 2 s
+    // (WARNING_TICKS viene de game.js via window).
+    if ( game.frightenedTicks > 0 && g.state !== 'eyes' ) {
+      color = FRIGHTENED_COLOR;
+      if (
+        game.frightenedTicks <= WARNING_TICKS &&
+        Math.floor( game.frightenedTicks / 15 ) % 2 === 1
+      ) {
+        color = FRIGHTENED_FLASH_COLOR;
+      }
+    }
+    drawGhost( ctx, g, color );
+  } );
   drawHUD( ctx, game, W );
 }
 
