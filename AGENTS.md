@@ -14,7 +14,7 @@ Scripts are plain `<script>` tags loaded in a **fixed order** in `src/index.html
 maze.js -> game.js -> render.js -> main.js
 ```
 
-They communicate **only through `window.*` globals** explicitly assigned at the end of each file (`window.MAZE`, `window.TUNNEL_ROW`, `window.PACMAN_START`, `window.GHOST_STARTS`, `window.createGame`, `window.update`, `window.DIRS`, `window.draw`). This is deliberate, not an oversight.
+They communicate **only through `window.*` globals** explicitly assigned at the end of each file (`window.MAZE`, `window.TUNNEL_ROW`, `window.PACMAN_START`, `window.GHOST_STARTS`, `window.createGame`, `window.update`, `window.DIRS`, `window.WARNING_TICKS`, `window.draw`). This is deliberate, not an oversight.
 
 - Do **not** reorder the tags or convert to ES modules without refactoring every global export/import.
 - `main.js` is the entry point (loop, keyboard, overlay) and consumes `createGame` / `update` / `draw`.
@@ -34,6 +34,7 @@ File responsibilities:
 - `.` → dot (`2`)
 - ` `` → empty traversable (`0`)
 - `-` → pen door (`3`) — blocks Pac-Man, **not** ghosts
+- `o` → power pellet (`4`) — the 4 corners (1,3), (26,3), (1,23), (26,23); **not** counted in `dotsRemaining`
 
 Coordinates are cell `(x, y)`, origin top-left, `x ∈ [0,27]`, `y ∈ [0,30]`. Maze is vertically symmetric about the gap between columns 13 and 14.
 
@@ -44,6 +45,10 @@ Key constants: `TUNNEL_ROW = 14` (open-ended wrap row), `PACMAN_START = {x:13, y
 States: `'start'` | `'playing'` | `'won'` | `'lost'`. Transitions are driven by `main.js`'s `loop()`; `game.js` only sets `won`/`lost`. Lives = 3, ghost collision resets positions (not the score/grid).
 
 Ghost AI kinds (in `GHOST_STARTS`): `'blinky'` aggressive — target = Pac-Man's cell; `'pinky'` ambusher — target = Pac-Man + 4 cells in his current direction; `'inky'` flanker — target = blinky + 2 × ((pac + 2 ahead) − blinky), falls back to blinky behavior if no blinky exists; `'clyde'` shy — target = Pac-Man beyond 8 Manhattan cells, else `CLYDE_CORNER` (1,29). All share the greedy selector in `decideGhost()`: valid non-reverse direction minimizing Manhattan distance to the target (180° only in dead ends). While inside the pen or on its door the target is fixed `PEN_EXIT` (13,11) so ghosts always leave. Speeds (`GHOST_SPEEDS`): blinky 1/9, pinky 1/10, inky 1/11, clyde 1/12 — all slower than Pac-Man (1/8). Colors are kind-bound in `GHOST_COLORS` (`render.js`), not index-based.
+
+Power pellets & frightened (SPEC 02): eating a pellet (tile `4`) gives +50, sets `frightenedTicks = 360` (6 s at 60 ticks/s), reverses all non-eyes ghosts 180° (`reversePending` protects the turn from being re-decided) and resets the eat chain. While active, non-eyes ghosts flee Pac-Man — mirror target `2·g − pac` through the same greedy selector; the pen guard does **not** apply (they flee inside the pen too) — at `FRIGHTENED_SPEEDS` 1/18…1/24, drawn blue (`#2121ff`) flashing white during the last `WARNING_TICKS` (120). Contact then eats the ghost: `GHOST_EAT_POINTS` chain 200/400/800/1600 (capped, reset per pellet / mode end / life loss) and it becomes **eyes** at `EYES_SPEED` 1/6, descending the per-game BFS field `penDist` (distances to (13,14)) and reviving on pen entry (`enCorral`). Eyes are pass-through for Pac-Man; losing a life cuts the mode; pellets never decrement `dotsRemaining` (winning requires only normal dots).
+
+Movement invariant: ghost speed is always derived from mode (`ghostSpeed()`), never stored. Every mid-segment speed change **snaps to the nearest cell** (`snapToCell()`): a 1/N step only re-aligns if the whole segment runs at that speed, and after a mid-segment change the position can be a non-integer multiple of the new step that never aligns again — `decideGhost`/`canMove` never run and the ghost marches through walls off-screen. Needs the snap: eating a ghost (`1/(2N)`→`1/6`) and mode expiry (`1/(2N)`→`1/N`). Safe without: pellet (`1/N`→`1/(2N)`) and revive (already aligned).
 
 ## Workflow
 
