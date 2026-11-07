@@ -1,6 +1,6 @@
 # SPEC 01 — Cuatro fantasmas con personalidad propia
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** — (primera spec del proyecto)
 > **Fecha:** 2026-10-26
 > **Objetivo:** Los 4 fantasmas del corral (blinky, pinky, inky, clyde) tienen cada uno una personalidad de ataque distinta con velocidad y color propios, y blinky persigue agresivamente a Pac-Man de forma directa.
