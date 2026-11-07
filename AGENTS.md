@@ -24,7 +24,7 @@ File responsibilities:
 - `maze.js` — pristine `MAZE` grid (28×31) + constants. Never mutated; `createGame()` copies it per game.
 - `game.js` — `createGame()` / `update()`. All rules and state live here.
 - `render.js` — `draw()`. Pure drawing driven by `game.grid` (not `MAZE`, so eaten dots disappear).
-- `main.js` — `requestAnimationFrame` loop, key → direction mapping, overlay/state transitions.
+- `main.js` — `requestAnimationFrame` loop with a **fixed 60 ticks/s timestep** (accumulator; logic speed is refresh-rate independent), key → direction mapping, overlay/state transitions.
 
 ## Maze encoding (`maze.js`)
 
