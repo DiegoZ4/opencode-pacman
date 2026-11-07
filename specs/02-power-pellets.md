@@ -1,6 +1,6 @@
 # SPEC 02 — Power pellets y fantasmas comestibles
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01
 > **Fecha:** 2026-11-07
 > **Objetivo:** Cuatro power pellets en las esquinas asustan a los fantasmas durante 6 s, volviéndolos comestibles por 200/400/800/1600 puntos mientras sus ojos regresan al corral para revivir.
