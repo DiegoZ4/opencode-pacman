@@ -174,6 +174,22 @@ function enCorral( g ) {
     ( g.y === 12 && ( g.x === 13 || g.x === 14 ) );
 }
 
+// SPEC 02 (fix): alinear a la celda mas cercana cuando la velocidad cambia
+// a mitad de segmento. Los pasos 1/N solo alinean si el segmento entero se
+// recorre a esa velocidad; tras un cambio a mitad el fantasma puede quedar
+// en un multiplo no entero de la nueva velocidad y no volver a alinear JAMAS
+// (decideGhost nunca corre, canMove nunca se evalua) con lo que marcha en
+// linea recta a traves de las paredes. Lo necesitan: comer fantasma
+// (1/(2N) -> 1/6) y expirar el modo (1/(2N) -> 1/N). Comer pellet
+// (1/N -> 1/(2N)) y revivir (ya en celda alineada) son seguros: sin snap.
+function snapToCell( g ) {
+  g.x = Math.round( g.x );
+  g.y = Math.round( g.y );
+  const width = MAZE[ 0 ].length;
+  if ( g.x >= width ) g.x = width - 1; // tunel: el redondeo no debe salir del tablero
+  if ( g.x < 0 ) g.x = 0;
+}
+
 // Celda objetivo de cada personalidad. Puede caer fuera del laberinto:
 // el selector voraz solo compara distancias Manhattan.
 function ghostTarget( game, g ) {
@@ -330,6 +346,7 @@ function update( game ) {
     if ( game.frightenedTicks > 0 ) {
       game.score += GHOST_EAT_POINTS[ Math.min( game.ghostEatChain, GHOST_EAT_POINTS.length - 1 ) ];
       game.ghostEatChain++;
+      snapToCell( g ); // fix: el cambio 1/(2N)->1/6 a mitad de segmento desalinearia
       g.state = 'eyes';
       g.reversePending = false;
       continue; // en el mismo tick pueden comerse mas
@@ -348,7 +365,14 @@ function update( game ) {
 
   if ( game.frightenedTicks > 0 ) {
     game.frightenedTicks--;
-    if ( game.frightenedTicks === 0 ) game.ghostEatChain = 0; // fin del modo
+    if ( game.frightenedTicks === 0 ) {
+      game.ghostEatChain = 0; // fin del modo
+      // fix: el cambio 1/(2N)->1/N a mitad de segmento desalinearia.
+      // Los ojos no cambian de velocidad y no necesitan snap.
+      for ( const g of game.ghosts ) {
+        if ( g.state !== 'eyes' ) snapToCell( g );
+      }
+    }
   }
   if ( game.dotsRemaining <= 0 ) game.state = 'won';
 }

@@ -78,6 +78,7 @@ Convenciones heredadas: velocidades siempre `1/N` (exigencia de `aligned()` con 
 - **Sí:** parpadeo de aviso, reversa 180° general, cadena clásica, huir también dentro del corral y pellets fuera de la victoria — decisiones del usuario en la fase de preguntas.
 - **Sí:** un único timer global — un fantasma que revive con el modo aún activo vuelve a estar asustado (simplicidad). **No:** frightened por fantasma.
 - **Sí:** perder vida corta el modo y resetea la cadena — evita estados zombis tras el reset de posiciones.
+- **Sí (fix al implementar el paso 3):** `snapToCell()` — alinear a la celda más cercana en las transiciones de velocidad a mitad de segmento: comer fantasma (`1/(2N)`→`1/6`) y expiración del modo (`1/(2N)`→`1/N`). Sin él, el fantasma queda en un múltiplo no entero de la nueva velocidad, `aligned()` nunca vuelve a disparar, `decideGhost`/`canMove` no se evalúan y cruza paredes en línea recta fuera de pantalla (bug visto en juego real: los ojos se iban de la pantalla y no regresaban). Comer pellet (`1/N`→`1/(2N)`, siempre alcanza un entero) y revivir (ocurre ya alineado) son matemáticamente seguros y no llevan snap.
 
 ## Riesgos
 
