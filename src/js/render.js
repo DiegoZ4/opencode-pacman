@@ -5,6 +5,8 @@ const TILE = 20;
 const WALL_COLOR = '#2121ff';
 const DOOR_COLOR = '#ffb8ff';
 const DOT_COLOR = '#ffb897';
+const PELLET_COLOR = DOT_COLOR; // power pellet (tile 4): mismo tono que los dots
+const PELLET_RADIUS = 6;        // gordo, frente al 2.5 del dot normal
 
 function cellCenter( x, y ) {
   return { cx: x * TILE + TILE / 2, cy: y * TILE + TILE / 2 };
@@ -66,12 +68,23 @@ function drawDoor( ctx, grid ) {
   ctx.stroke();
 }
 
-function drawDots( ctx, grid ) {
-  ctx.fillStyle = DOT_COLOR;
+function drawDots( ctx, grid, frame ) {
   for ( let y = 0; y < grid.length; y++ ) {
     for ( let x = 0; x < grid[ 0 ].length; x++ ) {
-      if ( grid[ y ][ x ] !== 2 ) continue;
+      const v = grid[ y ][ x ];
+      if ( v !== 2 && v !== 4 ) continue;
       const { cx, cy } = cellCenter( x, y );
+      if ( v === 4 ) {
+        // Power pellet: parpadea (visible medio ciclo de 20 ticks ~ 3 veces/s).
+        if ( Math.floor( frame / 10 ) % 2 === 0 ) {
+          ctx.fillStyle = PELLET_COLOR;
+          ctx.beginPath();
+          ctx.arc( cx, cy, PELLET_RADIUS, 0, Math.PI * 2 );
+          ctx.fill();
+        }
+        continue;
+      }
+      ctx.fillStyle = DOT_COLOR;
       ctx.beginPath();
       ctx.arc( cx, cy, 2.5, 0, Math.PI * 2 );
       ctx.fill();
@@ -159,7 +172,7 @@ function draw( ctx, game, frame ) {
 
   drawWalls( ctx, grid );
   drawDoor( ctx, grid );
-  drawDots( ctx, grid );
+  drawDots( ctx, grid, frame );
   drawPacman( ctx, game.pacman, frame );
   game.ghosts.forEach( ( g ) => drawGhost( ctx, g, GHOST_COLORS[ g.kind ] || '#ff0000' ) );
   drawHUD( ctx, game, W );
